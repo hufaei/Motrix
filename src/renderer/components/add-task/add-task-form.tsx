@@ -24,6 +24,10 @@ import {
   useWatch,
 } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
+import {
+  type BatchTorrentItem,
+  BatchTorrentReview,
+} from './batch-torrent-review'
 import { FooterActions } from './footer-actions'
 import { LinksTabPanel } from './links-tab-panel'
 import { TorrentTabPanel } from './torrent-tab-panel'
@@ -51,6 +55,7 @@ export function AddTaskForm({
 }: AddTaskFormProps) {
   const platform = usePlatformServices()
   const [submitting, setSubmitting] = useState(false)
+  const [batchItems, setBatchItems] = useState<BatchTorrentItem[] | null>(null)
 
   const form = useForm<AddTaskFormValues>({
     resolver: zodResolver(addTaskFormSchema) as Resolver<AddTaskFormValues>,
@@ -111,36 +116,63 @@ export function AddTaskForm({
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        if (batchItems) return
         e.preventDefault()
         void form.handleSubmit(onSubmit)()
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [form, onSubmit])
+  }, [form, onSubmit, batchItems])
+
+  const handleBatchParsed = useCallback((items: BatchTorrentItem[]) => {
+    setBatchItems(items)
+  }, [])
+
+  const handleBatchCancel = useCallback(() => {
+    setBatchItems(null)
+  }, [])
+
+  const handleBatchDone = useCallback(() => {
+    onSubmitSuccess?.('')
+  }, [onSubmitSuccess])
 
   return (
     <FormProvider {...form}>
-      <div
-        data-adaptive-content
-        className="flex max-h-[calc(100vh-40px)] flex-col overflow-y-auto"
-      >
-        <div className="mb-16 px-4 py-2">
-          <TabsSection />
-        </div>
-      </div>
-      <div className="fixed left-0 bottom-0 w-full shrink-0 border-t-[0.5px] border-border bg-background px-4 py-3">
-        <FooterActionsBridge
-          onCancel={onCancel}
-          onSubmit={() => void form.handleSubmit(onSubmit)()}
-          submitting={submitting}
+      {batchItems ? (
+        <BatchTorrentReview
+          items={batchItems}
+          onCancel={handleBatchCancel}
+          onDone={handleBatchDone}
         />
-      </div>
+      ) : (
+        <>
+          <div
+            data-adaptive-content
+            className="flex max-h-[calc(100vh-40px)] flex-col overflow-y-auto"
+          >
+            <div className="mb-16 px-4 py-2">
+              <TabsSection onBatchParsed={handleBatchParsed} />
+            </div>
+          </div>
+          <div className="fixed left-0 bottom-0 w-full shrink-0 border-t-[0.5px] border-border bg-background px-4 py-3">
+            <FooterActionsBridge
+              onCancel={onCancel}
+              onSubmit={() => void form.handleSubmit(onSubmit)()}
+              submitting={submitting}
+            />
+          </div>
+        </>
+      )}
     </FormProvider>
   )
 }
 
-function TabsSection() {
+function TabsSection({
+  onBatchParsed,
+}: {
+  onBatchParsed?: (items: BatchTorrentItem[]) => void
+}) {
   const { t } = useTranslation()
   const { setValue } = useFormContext<AddTaskFormValues>()
   const tab = useWatch<AddTaskFormValues, 'tab'>({ name: 'tab' })
@@ -168,7 +200,7 @@ function TabsSection() {
         keepMounted
         className="mt-2 flex min-h-0 min-w-0 flex-1 data-hidden:hidden"
       >
-        <TorrentTabPanel />
+        <TorrentTabPanel onBatchParsed={onBatchParsed} />
       </TabsContent>
     </Tabs>
   )
