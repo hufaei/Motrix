@@ -40,6 +40,7 @@ export const initTaskForm = state => {
     selectFile: NONE_SELECTED_FILES,
     split,
     torrent: '',
+    torrents: [],
     uris: addTaskUrl,
     userAgent: '',
     authorization: '',
@@ -145,4 +146,17 @@ export const buildTorrentPayload = (form) => {
     options
   }
   return result
+}
+
+export const buildTorrentPayloads = (form) => {
+  const { torrents } = form
+  if (isEmpty(torrents)) {
+    return [buildTorrentPayload(form)]
+  }
+
+  return torrents.map(torrent => buildTorrentPayload({
+    ...form,
+    torrent,
+    selectFile: SELECTED_ALL_FILES
+  }))
 }

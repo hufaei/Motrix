@@ -512,18 +512,20 @@ export function detectResource (content) {
   })
 }
 
-export function buildFileList (rawFile) {
-  rawFile.uid = Date.now()
-  const file = {
-    status: 'ready',
-    name: rawFile.name,
-    size: rawFile.size,
-    percentage: 0,
-    uid: rawFile.uid,
-    raw: rawFile
-  }
-  const fileList = [file]
-  return fileList
+export function buildFileList (rawFiles) {
+  const files = isArray(rawFiles) ? rawFiles : [rawFiles]
+  const uid = Date.now()
+  return files.map((rawFile, index) => {
+    rawFile.uid = uid + index
+    return {
+      status: 'ready',
+      name: rawFile.name,
+      size: rawFile.size,
+      percentage: 0,
+      uid: rawFile.uid,
+      raw: rawFile
+    }
+  })
 }
 
 export function isRTL (locale = 'en-US') {

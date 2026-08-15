@@ -202,7 +202,7 @@
   import {
     initTaskForm,
     buildUriPayload,
-    buildTorrentPayload
+    buildTorrentPayloads
   } from '@/utils/task'
   import { ADD_TASK_TYPE } from '@shared/constants'
   import { detectResource } from '@shared/utils'
@@ -279,7 +279,11 @@
         }
       },
       beforeClose () {
-        if (isEmpty(this.form.uris) && isEmpty(this.form.torrent)) {
+        if (
+          isEmpty(this.form.uris) &&
+          isEmpty(this.form.torrent) &&
+          isEmpty(this.form.torrents)
+        ) {
           this.handleClose()
         }
       },
@@ -330,8 +334,9 @@
           })
         }
       },
-      handleTorrentChange (torrent, selectedFileIndex) {
+      handleTorrentChange (torrent, selectedFileIndex, torrents = []) {
         this.form.torrent = torrent
+        this.form.torrents = torrents
         this.form.selectFile = selectedFileIndex
       },
       handleHistoryDirectorySelected (dir) {
@@ -353,9 +358,11 @@
             this.$msg.error(err.message)
           })
         } else if (type === ADD_TASK_TYPE.TORRENT) {
-          payload = buildTorrentPayload(form)
-          this.$store.dispatch('task/addTorrent', payload).catch(err => {
-            this.$msg.error(err.message)
+          const payloads = buildTorrentPayloads(form)
+          payloads.forEach(payload => {
+            this.$store.dispatch('task/addTorrent', payload).catch(err => {
+              this.$msg.error(err.message)
+            })
           })
         } else if (type === 'metalink') {
         // @TODO addMetalink

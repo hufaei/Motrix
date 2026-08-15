@@ -1,0 +1,42 @@
+name: Build Windows x64
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Enable Yarn 1
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build and package Windows x64
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          yarn build:github
+          yarn electron-builder --win nsis portable --x64 --publish never
+
+      - name: Upload Windows packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: Motrix-Windows-x64
+          path: |
+            release/Motrix-Setup-*.exe
+            release/Motrix-*-x64.exe
+          if-no-files-found: error

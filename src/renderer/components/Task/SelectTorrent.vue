@@ -5,7 +5,7 @@
     action="/"
     v-if="isTorrentsEmpty"
     :limit="1"
-    :multiple="false"
+    :multiple="true"
     accept=".torrent"
     :on-change="handleChange"
     :on-exceed="handleExceed"
@@ -23,7 +23,17 @@
   >
     <el-row class="torrent-info" :gutter="12">
       <el-col class="torrent-name" :span="20">
-        <el-tooltip class="item" effect="dark" :content="name" placement="top">
+        <div v-if="isBatch">
+          <div
+            class="batch-torrent-name"
+            v-for="torrent in torrents"
+            :key="torrent.uid"
+            :title="torrent.name"
+          >
+            {{ torrent.name }}
+          </div>
+        </div>
+        <el-tooltip v-else class="item" effect="dark" :content="name" placement="top">
           <span>{{ name }}</span>
         </el-tooltip>
       </el-col>
@@ -34,6 +44,7 @@
       </el-col>
     </el-row>
     <mo-task-files
+      v-if="!isBatch"
       ref="torrentFileList"
       mode="ADD"
       :files="files"
@@ -89,12 +100,20 @@
       }),
       isTorrentsEmpty () {
         return this.torrents.length === 0
+      },
+      isBatch () {
+        return this.torrents.length > 1
       }
     },
     watch: {
       torrents (fileList) {
         if (fileList.length === 0) {
           this.reset()
+          return
+        }
+
+        if (fileList.length > 1) {
+          this.loadBatchTorrents(fileList)
           return
         }
 
@@ -105,11 +124,17 @@
 
         remote(file.raw, { timeout: 60 * 1000 }, (err, parsedTorrent) => {
           if (err) throw err
+          if (this.torrents !== fileList) {
+            return
+          }
           console.log('[Motrix] parsed torrent: ', parsedTorrent)
           this.files = listTorrentFiles(parsedTorrent.files)
           this.$refs.torrentFileList.toggleAllSelection()
 
           getAsBase64(file.raw, (torrent) => {
+            if (this.torrents !== fileList) {
+              return
+            }
             this.name = file.name
             this.currentTorrent = torrent
             this.$emit('change', torrent, SELECTED_ALL_FILES)
@@ -118,6 +143,32 @@
       }
     },
     methods: {
+      loadBatchTorrents (fileList) {
+        const torrents = new Array(fileList.length)
+        let loaded = 0
+        fileList.forEach((file, index) => {
+          if (!file.raw) {
+            return
+          }
+
+          getAsBase64(file.raw, (torrent) => {
+            if (this.torrents !== fileList) {
+              return
+            }
+
+            torrents[index] = torrent
+            loaded += 1
+            if (loaded === fileList.length) {
+              this.$emit(
+                'change',
+                EMPTY_STRING,
+                SELECTED_ALL_FILES,
+                torrents
+              )
+            }
+          })
+        })
+      },
       reset () {
         this.name = EMPTY_STRING
         this.currentTorrent = EMPTY_STRING
@@ -125,13 +176,13 @@
         if (this.$refs.torrentFileList) {
           this.$refs.torrentFileList.clearSelection()
         }
-        this.$emit('change', EMPTY_STRING, NONE_SELECTED_FILES)
+        this.$emit('change', EMPTY_STRING, NONE_SELECTED_FILES, [])
       },
       handleChange (file, fileList) {
         this.$store.dispatch('app/addTaskAddTorrents', { fileList })
       },
       handleExceed (files) {
-        const fileList = buildFileList(files[0])
+        const fileList = buildFileList(files)
         this.$store.dispatch('app/addTaskAddTorrents', { fileList })
       },
       handleTrashClick () {
@@ -169,6 +220,11 @@
 }
 .selective-torrent {
   .torrent-name {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .batch-torrent-name {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
