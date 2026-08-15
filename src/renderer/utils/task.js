@@ -154,9 +154,22 @@ export const buildTorrentPayloads = (form) => {
     return [buildTorrentPayload(form)]
   }
 
-  return torrents.map(torrent => buildTorrentPayload({
-    ...form,
-    torrent,
-    selectFile: SELECTED_ALL_FILES
-  }))
+  const selectedTorrents = torrents.filter(item => {
+    return typeof item === 'string' || item.selectFile !== NONE_SELECTED_FILES
+  })
+  if (isEmpty(selectedTorrents)) {
+    throw new Error('task.select-at-least-one')
+  }
+
+  return selectedTorrents.map(item => {
+    const torrent = typeof item === 'string' ? item : item.torrent
+    const selectFile = typeof item === 'string'
+      ? SELECTED_ALL_FILES
+      : item.selectFile
+    return buildTorrentPayload({
+      ...form,
+      torrent,
+      selectFile
+    })
+  })
 }

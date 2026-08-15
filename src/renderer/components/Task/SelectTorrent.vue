@@ -36,36 +36,42 @@
         </span>
       </el-col>
     </el-row>
-    <el-table
+    <el-collapse
       v-if="isBatch"
-      ref="batchTorrentTable"
-      stripe
-      :data="batchTorrentItems"
-      row-key="identity"
-      :height="200"
-      tooltip-effect="dark"
-      style="width: 100%"
-      @row-dblclick="handleBatchRowDbClick"
-      @selection-change="handleBatchSelectionChange"
+      v-model="activeBatchTorrentKeys"
+      class="batch-torrent-list"
     >
-      <el-table-column
-        type="selection"
-        width="42"
-        :selectable="isBatchTorrentSelectable"
-      />
-      <el-table-column
-        :label="$t('task.file-name')"
-        min-width="200"
-        show-overflow-tooltip
+      <el-collapse-item
+        v-for="torrentItem in batchTorrentItems"
+        :key="torrentItem.identity"
+        :name="torrentItem.identity"
+        :disabled="!torrentItem.valid"
       >
-        <template slot-scope="scope">
-          <span :class="{ 'invalid-torrent': !scope.row.valid }">
-            {{ scope.row.name }}
+        <template slot="title">
+          <el-tooltip
+            effect="dark"
+            :content="torrentItem.sourceName"
+            placement="top"
+          >
+            <span :class="['batch-torrent-title', { 'invalid-torrent': !torrentItem.valid }]">
+              {{ torrentItem.name }}
+            </span>
+          </el-tooltip>
+          <span v-if="torrentItem.valid" class="batch-torrent-summary">
+            {{ torrentItem.files.length }} · {{ torrentItem.length | bytesToSize }}
           </span>
-          <span v-if="!scope.row.valid" class="invalid-torrent-mark">×</span>
+          <span v-else class="invalid-torrent-mark">×</span>
         </template>
-      </el-table-column>
-    </el-table>
+        <mo-task-files
+          v-if="torrentItem.valid"
+          ref="batchTorrentFileLists"
+          mode="ADD"
+          :files="torrentItem.files"
+          :height="200"
+          @selection-change="handleBatchFileSelectionChange(torrentItem, $event)"
+        />
+      </el-collapse-item>
+    </el-collapse>
     <mo-task-files
       v-if="!isBatch"
       ref="torrentFileList"
@@ -112,7 +118,7 @@
         name: EMPTY_STRING,
         currentTorrent: EMPTY_STRING,
         batchTorrentItems: [],
-        selectedBatchTorrentKeys: [],
+        activeBatchTorrentKeys: [],
         forceBatchMode: false,
         files: [],
         selectedFiles: []
@@ -185,8 +191,10 @@
     methods: {
       loadBatchTorrents (fileList) {
         const previousItems = this.batchTorrentItems
-        const previousKeys = new Set(previousItems.map(item => item.identity))
-        const previousSelectedKeys = new Set(this.selectedBatchTorrentKeys)
+        const previousItemMap = previousItems.reduce((result, item) => {
+          result[item.identity] = item
+          return result
+        }, {})
         const torrentItems = new Array(fileList.length)
         let loaded = 0
         this.forceBatchMode = true
@@ -213,23 +221,15 @@
           })
 
           this.batchTorrentItems = uniqueItems
+          this.activeBatchTorrentKeys = uniqueItems
+            .filter(torrentItem => torrentItem.valid)
+            .map(torrentItem => torrentItem.identity)
           this.$nextTick(() => {
-            if (
-              this.torrents !== fileList ||
-              !this.$refs.batchTorrentTable
-            ) {
+            if (this.torrents !== fileList) {
               return
             }
 
-            this.$refs.batchTorrentTable.clearSelection()
-            this.handleBatchSelectionChange([])
-            uniqueItems.forEach(torrentItem => {
-              const isNew = !previousKeys.has(torrentItem.identity)
-              const wasSelected = previousSelectedKeys.has(torrentItem.identity)
-              if (torrentItem.valid && (isNew || wasSelected)) {
-                this.$refs.batchTorrentTable.toggleRowSelection(torrentItem, true)
-              }
-            })
+            this.restoreBatchFileSelections()
             this.$emit('loading-change', false)
           })
         }
@@ -239,8 +239,12 @@
           const invalidItem = {
             identity: `file:${fileKey}`,
             uid: file.uid,
+            sourceName: file.name,
             name: file.name,
+            length: 0,
+            files: [],
             torrent: EMPTY_STRING,
+            selectFile: NONE_SELECTED_FILES,
             valid: false
           }
 
@@ -259,13 +263,24 @@
             }
 
             getAsBase64(file.raw, (torrent) => {
+              const identity = parsedTorrent.infoHash
+                ? `hash:${parsedTorrent.infoHash}`
+                : `file:${fileKey}`
+              const previousItem = previousItemMap[identity]
+              const files = listTorrentFiles(parsedTorrent.files || [])
               completeItem(index, {
-                identity: parsedTorrent.infoHash
-                  ? `hash:${parsedTorrent.infoHash}`
-                  : `file:${fileKey}`,
+                identity,
                 uid: file.uid,
-                name: file.name,
+                sourceName: file.name,
+                name: parsedTorrent.name || file.name,
+                length: parsedTorrent.length || files.reduce((total, item) => {
+                  return total + item.length
+                }, 0),
+                files,
                 torrent,
+                selectFile: previousItem
+                  ? previousItem.selectFile
+                  : SELECTED_ALL_FILES,
                 valid: true
               })
             }, () => {
@@ -280,11 +295,15 @@
         this.batchTorrentItems = [{
           identity,
           uid: file.uid,
+          sourceName: file.name,
           name: file.name || this.$t('task.torrent-task'),
+          length: 0,
+          files: [],
           torrent: EMPTY_STRING,
+          selectFile: NONE_SELECTED_FILES,
           valid: false
         }]
-        this.selectedBatchTorrentKeys = []
+        this.activeBatchTorrentKeys = []
         this.$emit('loading-change', false)
         this.$emit('change', EMPTY_STRING, NONE_SELECTED_FILES, [])
       },
@@ -292,7 +311,7 @@
         this.name = EMPTY_STRING
         this.currentTorrent = EMPTY_STRING
         this.batchTorrentItems = []
-        this.selectedBatchTorrentKeys = []
+        this.activeBatchTorrentKeys = []
         this.forceBatchMode = false
         this.files = []
         if (this.$refs.torrentFileList) {
@@ -311,18 +330,44 @@
       handleTrashClick () {
         this.$store.dispatch('app/addTaskAddTorrents', { fileList: [] })
       },
-      handleBatchRowDbClick (row) {
-        if (!row.valid) {
-          return
-        }
-        this.$refs.batchTorrentTable.toggleRowSelection(row)
+      restoreBatchFileSelections () {
+        const validItems = this.batchTorrentItems.filter(item => item.valid)
+        const fileLists = this.$refs.batchTorrentFileLists || []
+        const refs = Array.isArray(fileLists) ? fileLists : [fileLists]
+        validItems.forEach((item, index) => {
+          const fileList = refs[index]
+          if (!fileList) {
+            return
+          }
+
+          if (item.selectFile === SELECTED_ALL_FILES) {
+            fileList.toggleSelection(item.files)
+            return
+          }
+          if (item.selectFile === NONE_SELECTED_FILES) {
+            fileList.clearSelection()
+            return
+          }
+
+          const selectedIndexes = item.selectFile.split(',')
+          const selectedFiles = item.files.filter(file => {
+            return selectedIndexes.includes(String(file.idx))
+          })
+          fileList.toggleSelection(selectedFiles)
+        })
+        this.emitBatchChange()
       },
-      isBatchTorrentSelectable (row) {
-        return row.valid
+      handleBatchFileSelectionChange (torrentItem, selectedFileIndex) {
+        torrentItem.selectFile = selectedFileIndex
+        this.emitBatchChange()
       },
-      handleBatchSelectionChange (selectedItems) {
-        this.selectedBatchTorrentKeys = selectedItems.map(item => item.identity)
-        const torrents = selectedItems.map(item => item.torrent)
+      emitBatchChange () {
+        const torrents = this.batchTorrentItems
+          .filter(item => item.valid)
+          .map(item => ({
+            torrent: item.torrent,
+            selectFile: item.selectFile
+          }))
         this.$emit(
           'change',
           EMPTY_STRING,
@@ -370,6 +415,22 @@
     margin-bottom: 15px;
     font-size: 12px;
     line-height: 16px;
+  }
+  .batch-torrent-list {
+    max-height: 420px;
+    overflow-y: auto;
+  }
+  .batch-torrent-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .batch-torrent-summary {
+    flex: none;
+    margin: 0 12px;
+    color: $--color-text-secondary;
   }
   .invalid-torrent {
     color: $--color-text-placeholder;
