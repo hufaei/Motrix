@@ -27,7 +27,10 @@
         </el-tab-pane>
         <el-tab-pane :label="$t('task.torrent-task')" name="torrent">
           <el-form-item>
-            <mo-select-torrent v-on:change="handleTorrentChange" />
+            <mo-select-torrent
+              v-on:change="handleTorrentChange"
+              v-on:loading-change="handleTorrentLoadingChange"
+            />
           </el-form-item>
         </el-tab-pane>
       </el-tabs>
@@ -182,6 +185,7 @@
           </el-button>
           <el-button
             type="primary"
+            :loading="torrentLoading"
             @click="submitForm('taskForm')"
           >
             {{$t('app.submit')}}
@@ -229,6 +233,7 @@
       return {
         formLabelWidth: '110px',
         showAdvanced: false,
+        torrentLoading: false,
         form: {},
         rules: {}
       }
@@ -339,6 +344,9 @@
         this.form.torrents = torrents
         this.form.selectFile = selectedFileIndex
       },
+      handleTorrentLoadingChange (loading) {
+        this.torrentLoading = loading
+      },
       handleHistoryDirectorySelected (dir) {
         this.form.dir = dir
       },
@@ -371,6 +379,10 @@
         }
       },
       submitForm (formName) {
+        if (this.torrentLoading) {
+          return
+        }
+
         this.$refs[formName].validate(valid => {
           if (!valid) {
             return false

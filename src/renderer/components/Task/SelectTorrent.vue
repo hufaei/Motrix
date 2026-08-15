@@ -23,7 +23,7 @@
   >
     <el-row class="torrent-info" :gutter="12">
       <el-col class="torrent-name" :span="20">
-        <div v-if="isBatch">
+        <div v-if="isBatch" class="batch-torrent-list">
           <div
             class="batch-torrent-name"
             v-for="torrent in torrents"
@@ -144,13 +144,17 @@
     },
     methods: {
       loadBatchTorrents (fileList) {
+        const invalidFile = fileList.find(file => !file.raw)
+        if (invalidFile) {
+          this.$store.dispatch('app/addTaskAddTorrents', { fileList: [] })
+          this.$msg.error(this.$t('task.select-torrent'))
+          return
+        }
+
         const torrents = new Array(fileList.length)
         let loaded = 0
+        this.$emit('loading-change', true)
         fileList.forEach((file, index) => {
-          if (!file.raw) {
-            return
-          }
-
           getAsBase64(file.raw, (torrent) => {
             if (this.torrents !== fileList) {
               return
@@ -159,6 +163,7 @@
             torrents[index] = torrent
             loaded += 1
             if (loaded === fileList.length) {
+              this.$emit('loading-change', false)
               this.$emit(
                 'change',
                 EMPTY_STRING,
@@ -166,6 +171,13 @@
                 torrents
               )
             }
+          }, () => {
+            if (this.torrents !== fileList) {
+              return
+            }
+
+            this.$store.dispatch('app/addTaskAddTorrents', { fileList: [] })
+            this.$msg.error(`${file.name}: ${this.$t('task.select-torrent')}`)
           })
         })
       },
@@ -176,13 +188,14 @@
         if (this.$refs.torrentFileList) {
           this.$refs.torrentFileList.clearSelection()
         }
+        this.$emit('loading-change', false)
         this.$emit('change', EMPTY_STRING, NONE_SELECTED_FILES, [])
       },
       handleChange (file, fileList) {
         this.$store.dispatch('app/addTaskAddTorrents', { fileList })
       },
       handleExceed (files) {
-        const fileList = buildFileList(files)
+        const fileList = buildFileList(Array.from(files))
         this.$store.dispatch('app/addTaskAddTorrents', { fileList })
       },
       handleTrashClick () {
@@ -228,6 +241,10 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+  }
+  .batch-torrent-list {
+    max-height: 120px;
+    overflow-y: auto;
   }
   .torrent-info {
     margin-bottom: 15px;

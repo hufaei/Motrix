@@ -1,6 +1,9 @@
 name: Build Windows x64
 
 on:
+  push:
+    branches:
+      - feature/v1.8.19-batch-torrent-drop
   workflow_dispatch:
 
 permissions:

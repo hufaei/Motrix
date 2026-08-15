@@ -340,13 +340,16 @@ export function isTorrent (file) {
   return name.endsWith('.torrent') || type === 'application/x-bittorrent'
 }
 
-export function getAsBase64 (file, callback) {
+export function getAsBase64 (file, callback, errorCallback) {
   const reader = new FileReader()
   reader.addEventListener('load', () => {
     // https://developer.mozilla.org/en-US/docs/Web/API/FileReader/readAsDataURL
     const result = reader.result.split('base64,')[1]
     callback(result)
   })
+  if (errorCallback) {
+    reader.addEventListener('error', errorCallback)
+  }
   reader.readAsDataURL(file)
 }
 
