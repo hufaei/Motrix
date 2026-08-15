@@ -1,4 +1,5 @@
 import { ADD_TASK_TYPE } from '@shared/constants'
+import { getTorrentFileKey } from '@shared/utils'
 import api from '@/api'
 import { getSystemTheme } from '@/utils/native'
 
@@ -167,6 +168,22 @@ const actions = {
   },
   addTaskAddTorrents ({ commit }, { fileList }) {
     commit('UPDATE_ADD_TASK_TORRENTS', fileList)
+  },
+  appendTaskAddTorrents ({ commit, state }, { fileList }) {
+    const current = state.addTaskTorrents
+    const seen = new Set(current.map(getTorrentFileKey))
+    const appended = fileList.filter(file => {
+      const key = getTorrentFileKey(file)
+      if (seen.has(key)) {
+        return false
+      }
+      seen.add(key)
+      return true
+    })
+
+    if (appended.length > 0) {
+      commit('UPDATE_ADD_TASK_TORRENTS', [...current, ...appended])
+    }
   },
   updateAddTaskOptions ({ commit }, options = {}) {
     commit('UPDATE_ADD_TASK_OPTIONS', options)

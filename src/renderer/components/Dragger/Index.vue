@@ -4,6 +4,7 @@
 
 <script>
   import { ADD_TASK_TYPE } from '@shared/constants'
+  import { buildFileList } from '@shared/utils'
 
   export default {
     name: 'mo-dragger',
@@ -27,12 +28,15 @@
       this.onDrop = (ev) => {
         count = 0
 
-        const fileList = [...ev.dataTransfer.files]
-          .map(item => ({ raw: item, name: item.name }))
-          .filter(item => /\.torrent$/.test(item.name))
+        const torrentFiles = [...ev.dataTransfer.files]
+          .filter(item => /\.torrent$/i.test(item.name))
+        const fileList = buildFileList(torrentFiles)
         if (!fileList.length) {
           this.$msg.error(this.$t('task.select-torrent'))
+          return
         }
+
+        this.$store.dispatch('app/appendTaskAddTorrents', { fileList })
       }
 
       document.addEventListener('dragover', this.preventDefault)

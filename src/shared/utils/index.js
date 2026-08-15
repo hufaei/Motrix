@@ -531,6 +531,15 @@ export function buildFileList (rawFiles) {
   })
 }
 
+export function getTorrentFileKey (file = {}) {
+  const raw = file.raw || file
+  const path = raw.path || ''
+  const name = raw.name || file.name || ''
+  const size = raw.size || file.size || 0
+  const lastModified = raw.lastModified || 0
+  return `${path}\u0000${name}\u0000${size}\u0000${lastModified}`
+}
+
 export function isRTL (locale = 'en-US') {
   return SUPPORT_RTL_LOCALES.includes(locale)
 }
