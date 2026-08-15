@@ -185,7 +185,7 @@
           </el-button>
           <el-button
             type="primary"
-            :loading="torrentLoading"
+            :loading="torrentLoadingActive"
             @click="submitForm('taskForm')"
           >
             {{$t('app.submit')}}
@@ -249,6 +249,9 @@
       }),
       taskType () {
         return this.type
+      },
+      torrentLoadingActive () {
+        return this.taskType === ADD_TASK_TYPE.TORRENT && this.torrentLoading
       }
     },
     watch: {
@@ -356,6 +359,7 @@
       },
       reset () {
         this.showAdvanced = false
+        this.torrentLoading = false
         this.form = initTaskForm(this.$store.state)
       },
       addTask (type, form) {
@@ -379,7 +383,7 @@
         }
       },
       submitForm (formName) {
-        if (this.torrentLoading) {
+        if (this.type === ADD_TASK_TYPE.TORRENT && this.torrentLoading) {
           return
         }
 
