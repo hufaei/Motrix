@@ -371,10 +371,12 @@
           })
         } else if (type === ADD_TASK_TYPE.TORRENT) {
           const payloads = buildTorrentPayloads(form)
-          payloads.forEach(payload => {
-            this.$store.dispatch('task/addTorrent', payload).catch(err => {
-              this.$msg.error(err.message)
-            })
+          const action = payloads.length > 1
+            ? 'task/addTorrents'
+            : 'task/addTorrent'
+          const payload = payloads.length > 1 ? payloads : payloads[0]
+          this.$store.dispatch(action, payload).catch(err => {
+            this.$msg.error(err.message)
           })
         } else if (type === 'metalink') {
         // @TODO addMetalink

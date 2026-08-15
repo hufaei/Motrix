@@ -194,6 +194,15 @@ export default class Api {
     return this.client.call('addTorrent', ...args)
   }
 
+  addTorrents (params) {
+    const tasks = params.map(({ torrent, options }) => {
+      const engineOptions = formatOptionsForEngine(options)
+      const args = compactUndefined([torrent, [], engineOptions])
+      return ['aria2.addTorrent', ...args]
+    })
+    return this.client.multicall(tasks)
+  }
+
   addMetalink (params) {
     const {
       metalink,

@@ -128,6 +128,13 @@ const actions = {
         dispatch('app/updateAddTaskOptions', {}, { root: true })
       })
   },
+  addTorrents ({ dispatch }, data) {
+    return api.addTorrents(data)
+      .then(() => {
+        dispatch('fetchList')
+        dispatch('app/updateAddTaskOptions', {}, { root: true })
+      })
+  },
   addMetalink ({ dispatch }, data) {
     const { metalink, options } = data
     return api.addMetalink({ metalink, options })
