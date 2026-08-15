@@ -414,7 +414,7 @@
 
 <style lang="scss">
 .el-dialog.add-task-dialog {
-  max-width: 632px;
+  max-width: 760px;
   min-width: 380px;
   .task-advanced-options .el-form-item:last-of-type {
     margin-bottom: 0;
