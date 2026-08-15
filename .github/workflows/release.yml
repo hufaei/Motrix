@@ -188,6 +188,11 @@ jobs:
           # Fetching the package target is explicit in the next step.
           MOTRIX_SKIP_ENGINE_FETCH: '1'
 
+      # pnpm's side-effects cache can leave electron's dist/ absent after
+      # install; the notice contract and electron-builder both need it.
+      - name: Ensure Electron runtime payload
+        run: node node_modules/electron/install.js
+
       - name: Fetch target aria2
         run: >-
           pnpm run fetch:engine
