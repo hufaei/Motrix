@@ -57,13 +57,11 @@ export class JSONRPCClient extends EventEmitter {
       }
     })
 
-    response
-      .json()
-      .then(this._onmessage)
-      .catch((err) => {
-        this.emit('error', err)
-      })
+    if (!response.ok) {
+      throw new Error(`JSON-RPC HTTP ${response.status} ${response.statusText}`.trim())
+    }
 
+    this._onmessage(await response.json())
     return response
   }
 
@@ -86,22 +84,53 @@ export class JSONRPCClient extends EventEmitter {
     const message = calls.map(([method, params]) => {
       return this._buildMessage(method, params)
     })
+    const promises = message.map(({ id }) => this._defer(id))
 
-    await this._send(message)
-
-    return message.map(({ id }) => {
-      const { promise } = (this.deferreds[id] = new Deferred())
-      return promise
+    this._send(message).catch((err) => {
+      message.forEach(({ id }) => this._reject(id, err))
     })
+
+    return promises
   }
 
   async call (method, parameters) {
     const message = this._buildMessage(method, parameters)
-    await this._send(message)
+    const promise = this._defer(message.id)
 
-    const { promise } = (this.deferreds[message.id] = new Deferred())
+    this._send(message).catch((err) => {
+      this._reject(message.id, err)
+    })
 
     return promise
+  }
+
+  _defer (id) {
+    const deferred = (this.deferreds[id] = new Deferred())
+    if (this.timeout > 0) {
+      deferred.timer = setTimeout(() => {
+        const error = new Error(`JSON-RPC request timed out after ${this.timeout} ms`)
+        error.code = 'ETIMEDOUT'
+        this._reject(id, error)
+      }, this.timeout)
+    }
+    return deferred.promise
+  }
+
+  _takeDeferred (id) {
+    const deferred = this.deferreds[id]
+    if (!deferred) return
+    clearTimeout(deferred.timer)
+    delete this.deferreds[id]
+    return deferred
+  }
+
+  _reject (id, err) {
+    const deferred = this._takeDeferred(id)
+    if (deferred) deferred.reject(err)
+  }
+
+  _rejectAll (err) {
+    Object.keys(this.deferreds).forEach((id) => this._reject(id, err))
   }
 
   async _send (message) {
@@ -114,11 +143,10 @@ export class JSONRPCClient extends EventEmitter {
   }
 
   _onresponse ({ id, error, result }) {
-    const deferred = this.deferreds[id]
+    const deferred = this._takeDeferred(id)
     if (!deferred) return
     if (error) deferred.reject(new JSONRPCError(error))
     else deferred.resolve(result)
-    delete this.deferreds[id]
   }
 
   _onrequest ({ method, params }) {
@@ -151,6 +179,7 @@ export class JSONRPCClient extends EventEmitter {
     const socket = (this.socket = new WebSocket(this.url('ws')))
 
     socket.onclose = (...args) => {
+      this._rejectAll(new Error('JSON-RPC connection closed'))
       this.emit('close', ...args)
     }
     socket.onmessage = (event) => {
@@ -175,8 +204,9 @@ export class JSONRPCClient extends EventEmitter {
 
   async close () {
     const { socket } = this
+    const closed = promiseEvent(this, 'close')
     socket.close()
-    return promiseEvent(this, 'close')
+    return closed
   }
 
   defaultOptions = {
@@ -185,6 +215,7 @@ export class JSONRPCClient extends EventEmitter {
     port: 80,
     secret: '',
     path: '/jsonrpc',
+    timeout: 15 * 1000,
     fetch,
     WebSocket
   }

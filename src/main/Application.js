@@ -320,30 +320,27 @@ export default class Application extends EventEmitter {
     const btPort = this.configManager.getSystemConfig('listen-port')
     const dhtPort = this.configManager.getSystemConfig('dht-listen-port')
 
-    const promises = [
-      this.upnp.map(btPort),
-      this.upnp.map(dhtPort)
-    ]
-    try {
-      await Promise.allSettled(promises)
-    } catch (e) {
-      logger.warn('[Motrix] start UPnP mapping fail', e.message)
-    }
+    await this.settleUPnP('map', [btPort, dhtPort])
   }
 
   async stopUPnPMapping () {
     const btPort = this.configManager.getSystemConfig('listen-port')
     const dhtPort = this.configManager.getSystemConfig('dht-listen-port')
 
-    const promises = [
-      this.upnp.unmap(btPort),
-      this.upnp.unmap(dhtPort)
-    ]
-    try {
-      await Promise.allSettled(promises)
-    } catch (e) {
-      logger.warn('[Motrix] stop UPnP mapping fail', e)
-    }
+    await this.settleUPnP('unmap', [btPort, dhtPort])
+  }
+
+  async settleUPnP (action, ports) {
+    const uniquePorts = [...new Set(ports)]
+    const results = await Promise.allSettled(
+      uniquePorts.map(port => Promise.resolve().then(() => this.upnp[action](port)))
+    )
+
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        logger.warn(`[Motrix] UPnP ${action} ${uniquePorts[index]} failed:`, result.reason)
+      }
+    })
   }
 
   watchUPnPPortsChange () {
@@ -358,15 +355,10 @@ export default class Application extends EventEmitter {
           return
         }
 
-        const promises = [
-          this.upnp.unmap(oldValue),
-          this.upnp.map(newValue)
-        ]
-        try {
-          await Promise.allSettled(promises)
-        } catch (e) {
-          logger.info('[Motrix] change UPnP port mapping failed:', e)
-        }
+        await Promise.all([
+          this.settleUPnP('unmap', [oldValue]),
+          this.settleUPnP('map', [newValue])
+        ])
       })
     })
   }
@@ -388,7 +380,17 @@ export default class Application extends EventEmitter {
   async shutdownUPnPManager () {
     const enable = this.configManager.getUserConfig('enable-upnp')
     if (enable) {
-      await this.stopUPnPMapping()
+      let timeout
+      await Promise.race([
+        this.stopUPnPMapping(),
+        new Promise(resolve => {
+          timeout = setTimeout(() => {
+            logger.warn('[Motrix] UPnP cleanup timed out')
+            resolve()
+          }, 1000)
+        })
+      ])
+      clearTimeout(timeout)
     }
 
     this.upnp.closeClient()

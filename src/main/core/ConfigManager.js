@@ -63,6 +63,7 @@ export default class ConfigManager {
         'enable-dht6': true,
         'follow-metalink': true,
         'follow-torrent': true,
+        'force-save': true,
         'listen-port': 21301,
         'max-concurrent-downloads': 5,
         'max-connection-per-server': getMaxConnectionPerServer(),

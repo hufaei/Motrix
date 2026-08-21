@@ -61,6 +61,7 @@
         return api.fetchTaskItem({ gid })
           .catch((e) => {
             console.warn(`fetchTaskItem fail: ${e.message}`)
+            return null
           })
       },
       onDownloadStart (event) {
@@ -75,6 +76,9 @@
 
         this.fetchTaskItem({ gid })
           .then((task) => {
+            if (!task) {
+              return
+            }
             const { dir } = task
             this.$store.dispatch('preference/recordHistoryDirectory', dir)
             const taskName = getTaskName(task)
@@ -91,6 +95,9 @@
 
         this.fetchTaskItem({ gid })
           .then((task) => {
+            if (!task) {
+              return
+            }
             const taskName = getTaskName(task)
             const message = this.$t('task.download-pause-message', { taskName })
             this.$msg.info(message)
@@ -100,6 +107,9 @@
         const [{ gid }] = event
         this.fetchTaskItem({ gid })
           .then((task) => {
+            if (!task) {
+              return
+            }
             const taskName = getTaskName(task)
             const message = this.$t('task.download-stop-message', { taskName })
             this.$msg.info(message)
@@ -109,6 +119,9 @@
         const [{ gid }] = event
         this.fetchTaskItem({ gid })
           .then((task) => {
+            if (!task) {
+              return
+            }
             const taskName = getTaskName(task)
             const { errorCode, errorMessage } = task
             console.error(`[Motrix] download error gid: ${gid}, #${errorCode}, ${errorMessage}`)
@@ -130,6 +143,9 @@
 
         this.fetchTaskItem({ gid })
           .then((task) => {
+            if (!task) {
+              return
+            }
             this.handleDownloadComplete(task, false)
           })
       },
@@ -145,6 +161,9 @@
 
         this.fetchTaskItem({ gid })
           .then((task) => {
+            if (!task) {
+              return
+            }
             this.handleDownloadComplete(task, true)
           })
       },
@@ -188,7 +207,7 @@
         const taskName = getTaskName(task)
 
         const message = this.$t('task.download-fail-message', { taskName })
-        this.$msg.success(message)
+        this.$msg.error(message)
 
         if (!this.taskNotification) {
           return
@@ -216,34 +235,51 @@
         api.client.removeListener('onBtDownloadComplete', this.onBtDownloadComplete)
       },
       startPolling () {
-        this.timer = setTimeout(() => {
-          this.polling()
-          this.startPolling()
+        this.timer = setTimeout(async () => {
+          this.timer = null
+          try {
+            await this.polling()
+          } catch (e) {
+            console.warn(`polling fail: ${e.message}`)
+          } finally {
+            if (!this.pollingStopped) {
+              this.startPolling()
+            }
+          }
         }, this.interval)
       },
       polling () {
-        this.$store.dispatch('app/fetchGlobalStat')
-        this.$store.dispatch('app/fetchProgress')
-        this.$store.dispatch('task/fetchList')
+        const requests = [
+          this.$store.dispatch('app/fetchGlobalStat'),
+          this.$store.dispatch('app/fetchProgress'),
+          this.$store.dispatch('task/fetchList')
+        ]
 
         if (this.taskDetailVisible && this.currentTaskGid) {
           if (this.currentTaskIsBT && this.enabledFetchPeers) {
-            this.$store.dispatch('task/fetchItemWithPeers', this.currentTaskGid)
+            requests.push(this.$store.dispatch('task/fetchItemWithPeers', this.currentTaskGid))
           } else {
-            this.$store.dispatch('task/fetchItem', this.currentTaskGid)
+            requests.push(this.$store.dispatch('task/fetchItem', this.currentTaskGid))
           }
         }
+
+        return Promise.allSettled(requests)
       },
       stopPolling () {
+        this.pollingStopped = true
         clearTimeout(this.timer)
         this.timer = null
       }
     },
     created () {
+      this.pollingStopped = false
       this.bindEngineEvents()
     },
     mounted () {
-      setTimeout(() => {
+      this.timer = setTimeout(() => {
+        if (this.pollingStopped) {
+          return
+        }
         this.$store.dispatch('app/fetchEngineInfo')
         this.$store.dispatch('app/fetchEngineOptions')
 

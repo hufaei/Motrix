@@ -200,7 +200,32 @@ export default class Api {
       const args = compactUndefined([torrent, [], engineOptions])
       return ['aria2.addTorrent', ...args]
     })
-    return this.client.multicall(tasks)
+    return this.client.multicall(tasks).then(results => {
+      const items = params.map((_, index) => {
+        const result = results[index]
+        return {
+          index,
+          success: Array.isArray(result),
+          error: Array.isArray(result) ? null : result
+        }
+      })
+      const failedItems = items.filter(item => !item.success)
+      if (failedItems.length > 0) {
+        const firstError = failedItems[0].error || {}
+        const error = new Error(firstError.message || 'Failed to add torrent')
+        error.batchResult = {
+          items,
+          successCount: items.length - failedItems.length,
+          failedCount: failedItems.length
+        }
+        throw error
+      }
+      return {
+        items,
+        successCount: items.length,
+        failedCount: 0
+      }
+    })
   }
 
   addMetalink (params) {

@@ -2,8 +2,8 @@ name: Build Windows x64
 
 on:
   push:
-    branches:
-      - feature/v1.8.19-batch-torrent-drop
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -27,6 +27,11 @@ jobs:
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
+
+      - name: Verify source
+        run: |
+          yarn lint
+          yarn test
 
       - name: Build and package Windows x64
         env:

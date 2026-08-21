@@ -49,7 +49,11 @@ export default class WindowManager extends EventEmitter {
   }
 
   getPageOptions (page) {
-    const result = pageConfig[page] || {}
+    const config = pageConfig[page] || {}
+    const result = {
+      ...config,
+      attrs: { ...(config.attrs || {}) }
+    }
     const hideAppMenu = this.userConfig['hide-app-menu']
     if (hideAppMenu) {
       result.attrs.frame = false
@@ -267,7 +271,9 @@ export default class WindowManager extends EventEmitter {
   }
 
   handleWindowBlur () {
-    app.on('browser-window-blur', this.onWindowBlur)
+    if (!app.listeners('browser-window-blur').includes(this.onWindowBlur)) {
+      app.on('browser-window-blur', this.onWindowBlur)
+    }
   }
 
   unbindWindowBlur () {

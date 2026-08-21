@@ -139,36 +139,43 @@
         this.$store.dispatch('app/updateAddTaskOptions', newOptions)
         this.$store.dispatch('app/showAddTaskDialog', ADD_TASK_TYPE.URI)
       },
-      deleteTaskFiles (task) {
+      async deleteTaskFiles (task) {
         try {
-          const result = moveTaskFilesToTrash(task)
-
-          if (!result) {
-            throw new Error('task.remove-task-file-fail')
-          }
+          await moveTaskFilesToTrash(task)
+          return true
         } catch (err) {
-          this.$msg.error(this.$t(err.message))
+          const message = err.message === 'task.file-path-error'
+            ? err.message
+            : 'task.remove-task-file-fail'
+          this.$msg.error(this.$t(message))
+          return false
         }
       },
-      removeTask (task, taskName, isRemoveWithFiles = false) {
-        this.$store.dispatch('task/forcePauseTask', task)
-          .finally(() => {
-            if (isRemoveWithFiles) {
-              this.deleteTaskFiles(task)
-            }
+      async removeTask (task, taskName, isRemoveWithFiles = false) {
+        const paused = await this.$store.dispatch('task/forcePauseTask', task)
+          .then(() => true, () => false)
+        if (isRemoveWithFiles && !paused) {
+          this.$msg.error(this.$t('task.pause-task-fail', { taskName }))
+          return
+        }
+        if (isRemoveWithFiles && !await this.deleteTaskFiles(task)) {
+          return
+        }
 
-            return this.removeTaskItem(task, taskName)
-          })
+        return this.removeTaskItem(task, taskName)
       },
-      removeTaskRecord (task, taskName, isRemoveWithFiles = false) {
-        this.$store.dispatch('task/forcePauseTask', task)
-          .finally(() => {
-            if (isRemoveWithFiles) {
-              this.deleteTaskFiles(task)
-            }
+      async removeTaskRecord (task, taskName, isRemoveWithFiles = false) {
+        const paused = await this.$store.dispatch('task/forcePauseTask', task)
+          .then(() => true, () => false)
+        if (isRemoveWithFiles && !paused) {
+          this.$msg.error(this.$t('task.pause-task-fail', { taskName }))
+          return
+        }
+        if (isRemoveWithFiles && !await this.deleteTaskFiles(task)) {
+          return
+        }
 
-            return this.removeTaskRecordItem(task, taskName)
-          })
+        return this.removeTaskRecordItem(task, taskName)
       },
       async removeTaskItem (task, taskName) {
         try {
@@ -198,25 +205,31 @@
           }
         }
       },
-      removeTasks (taskList, isRemoveWithFiles = false) {
+      async removeTasks (taskList, isRemoveWithFiles = false) {
         const gids = taskList.map((task) => task.gid)
-        this.$store.dispatch('task/batchForcePauseTask', gids)
-          .finally(() => {
-            if (isRemoveWithFiles) {
-              this.batchDeleteTaskFiles(taskList)
-            }
+        const paused = await this.$store.dispatch('task/batchForcePauseTask', gids)
+          .then(() => true, () => false)
+        if (isRemoveWithFiles && !paused) {
+          this.$msg.error(this.$t('task.pause-all-task-fail'))
+          return
+        }
+        if (isRemoveWithFiles && !await this.batchDeleteTaskFiles(taskList)) {
+          return
+        }
 
-            this.removeTaskItems(gids)
-          })
+        return this.removeTaskItems(gids)
       },
-      batchDeleteTaskFiles (taskList) {
+      async batchDeleteTaskFiles (taskList) {
         const promises = taskList.map((task, index) => delayDeleteTaskFiles(task, index * 200))
-        Promise.allSettled(promises).then(results => {
-          console.log('[Motrix] batch delete task files: ', results)
-        })
+        const results = await Promise.allSettled(promises)
+        if (results.some(({ status }) => status === 'rejected')) {
+          this.$msg.error(this.$t('task.remove-task-file-fail'))
+          return false
+        }
+        return true
       },
       removeTaskItems (gids) {
-        this.$store.dispatch('task/batchRemoveTask', gids)
+        return this.$store.dispatch('task/batchRemoveTask', gids)
           .then(() => {
             this.$msg.success(this.$t('task.batch-delete-task-success'))
           })

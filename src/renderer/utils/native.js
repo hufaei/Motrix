@@ -1,6 +1,6 @@
 import { shell, nativeTheme } from '@electron/remote'
-import { access, constants } from 'fs'
-import { resolve } from 'path'
+import { access, constants, promises as fs } from 'fs'
+import { isAbsolute, relative, resolve, sep } from 'path'
 import { Message } from 'element-ui'
 
 import {
@@ -66,7 +66,20 @@ export function getTaskFullPath (task) {
   return result
 }
 
-export const moveTaskFilesToTrash = (task) => {
+const moveToTrashIfExists = async (path) => {
+  try {
+    await fs.access(path, constants.F_OK)
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      return
+    }
+    throw err
+  }
+
+  await shell.trashItem(path)
+}
+
+export const moveTaskFilesToTrash = async (task) => {
   /**
    * For magnet link tasks, there is bittorrent, but there is no bittorrent.info.
    * The path is not a complete path before it becomes a BT task.
@@ -79,33 +92,22 @@ export const moveTaskFilesToTrash = (task) => {
 
   const { dir, status } = task
   const path = getTaskFullPath(task)
-  if (!path || dir === path) {
+  const taskDir = dir && resolve(dir)
+  const taskPath = path && resolve(path)
+  const relativePath = taskDir && taskPath && relative(taskDir, taskPath)
+  if (!relativePath || relativePath === '..' || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) {
     throw new Error('task.file-path-error')
   }
 
-  let deleteResult1 = true
-  access(path, constants.F_OK, async (err) => {
-    console.log(`[Motrix] ${path} ${err ? 'does not exist' : 'exists'}`)
-    if (!err) {
-      deleteResult1 = await shell.trashItem(path)
-    }
-  })
+  await moveToTrashIfExists(taskPath)
 
   // There is no configuration file for the completed task.
   if (status === TASK_STATUS.COMPLETE) {
-    return deleteResult1
+    return true
   }
 
-  let deleteResult2 = true
-  const extraFilePath = `${path}.aria2`
-  access(extraFilePath, constants.F_OK, async (err) => {
-    console.log(`[Motrix] ${extraFilePath} ${err ? 'does not exist' : 'exists'}`)
-    if (!err) {
-      deleteResult2 = await shell.trashItem(extraFilePath)
-    }
-  })
-
-  return deleteResult1 && deleteResult2
+  await moveToTrashIfExists(`${taskPath}.aria2`)
+  return true
 }
 
 export function getSystemTheme () {
@@ -114,12 +116,12 @@ export function getSystemTheme () {
 
 export const delayDeleteTaskFiles = (task, delay) => {
   return new Promise((resolve, reject) => {
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
-        const result = moveTaskFilesToTrash(task)
+        const result = await moveTaskFilesToTrash(task)
         resolve(result)
       } catch (err) {
-        reject(err.message)
+        reject(err)
       }
     }, delay)
   })

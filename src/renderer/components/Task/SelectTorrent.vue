@@ -49,6 +49,7 @@
       v-if="isBatch"
       v-model="activeBatchTorrentKeys"
       class="batch-torrent-list"
+      @change="handleBatchCollapseChange"
     >
       <el-collapse-item
         v-for="(torrentItem, index) in batchTorrentItems"
@@ -90,7 +91,7 @@
           </span>
         </template>
         <mo-task-files
-          v-if="torrentItem.valid"
+          v-if="torrentItem.valid && activeBatchTorrentKeys.includes(torrentItem.identity)"
           ref="batchTorrentFileLists"
           mode="ADD"
           :files="torrentItem.files"
@@ -180,7 +181,7 @@
           return
         }
 
-        if (fileList.length > 1) {
+        if (fileList.length > 1 || this.forceBatchMode) {
           this.loadBatchTorrents(fileList)
           return
         }
@@ -265,10 +266,10 @@
           } else {
             const validKeys = new Set(validItems.map(item => item.identity))
             const retainedKeys = previousActiveKeys.filter(key => validKeys.has(key))
-            const newKeys = validItems
-              .filter(item => !previousItemMap[item.identity])
-              .map(item => item.identity)
-            this.activeBatchTorrentKeys = [...retainedKeys, ...newKeys]
+            const newItem = validItems.find(item => !previousItemMap[item.identity])
+            this.activeBatchTorrentKeys = retainedKeys.length > 0
+              ? retainedKeys
+              : (newItem ? [newItem.identity] : [])
           }
           this.$nextTick(() => {
             if (this.torrents !== fileList) {
@@ -280,31 +281,39 @@
           })
         }
 
-        fileList.forEach((file, index) => {
-          const fileKey = getTorrentFileKey(file)
-          const invalidItem = {
-            identity: `file:${fileKey}`,
-            uid: file.uid,
-            sourceName: file.name,
-            name: file.name,
-            length: 0,
-            files: [],
-            torrent: EMPTY_STRING,
-            selectFile: NONE_SELECTED_FILES,
-            valid: false
+        let nextIndex = 0
+        const worker = async () => {
+          while (nextIndex < fileList.length) {
+            const index = nextIndex++
+            const item = await this.parseBatchTorrent(fileList[index], previousItemMap)
+            completeItem(index, item)
           }
+        }
+        const workerCount = Math.min(3, fileList.length)
+        Promise.all(Array.from({ length: workerCount }, worker))
+      },
+      parseBatchTorrent (file, previousItemMap) {
+        const fileKey = getTorrentFileKey(file)
+        const invalidItem = {
+          identity: `file:${fileKey}`,
+          uid: file.uid,
+          sourceName: file.name,
+          name: file.name,
+          length: 0,
+          files: [],
+          torrent: EMPTY_STRING,
+          selectFile: NONE_SELECTED_FILES,
+          valid: false
+        }
 
-          if (!file.raw) {
-            completeItem(index, invalidItem)
-            return
-          }
+        if (!file.raw) {
+          return Promise.resolve(invalidItem)
+        }
 
+        return new Promise(resolve => {
           remote(file.raw, { timeout: 60 * 1000 }, (err, parsedTorrent) => {
-            if (this.torrents !== fileList) {
-              return
-            }
             if (err) {
-              completeItem(index, invalidItem)
+              resolve(invalidItem)
               return
             }
 
@@ -314,7 +323,7 @@
                 : `file:${fileKey}`
               const previousItem = previousItemMap[identity]
               const files = listTorrentFiles(parsedTorrent.files || [])
-              completeItem(index, {
+              resolve({
                 identity,
                 uid: file.uid,
                 sourceName: file.name,
@@ -329,9 +338,7 @@
                   : SELECTED_ALL_FILES,
                 valid: true
               })
-            }, () => {
-              completeItem(index, invalidItem)
-            })
+            }, () => resolve(invalidItem))
           })
         })
       },
@@ -377,12 +384,17 @@
         this.$store.dispatch('app/addTaskAddTorrents', { fileList: [] })
       },
       restoreBatchFileSelections () {
-        const validItems = this.batchTorrentItems.filter(item => item.valid)
+        const validItems = this.batchTorrentItems.filter(item => {
+          return item.valid && this.activeBatchTorrentKeys.includes(item.identity)
+        })
         const fileLists = this.$refs.batchTorrentFileLists || []
         const refs = Array.isArray(fileLists) ? fileLists : [fileLists]
         validItems.forEach((item, index) => {
           const fileList = refs[index]
           if (!fileList) {
+            return
+          }
+          if (fileList.selectedFileIndex === item.selectFile) {
             return
           }
 
@@ -401,7 +413,35 @@
           })
           fileList.toggleSelection(selectedFiles)
         })
+      },
+      handleBatchCollapseChange () {
+        this.$nextTick(() => this.restoreBatchFileSelections())
+      },
+      retainFailedTorrents (payloads, results) {
+        const succeededTorrents = new Set(results
+          .filter(item => item.success && payloads[item.index])
+          .map(item => payloads[item.index].torrent))
+        if (succeededTorrents.size === 0) {
+          return
+        }
+
+        const remainingItems = this.batchTorrentItems.filter(item => {
+          return !succeededTorrents.has(item.torrent)
+        })
+        const remainingUids = new Set(remainingItems.map(item => item.uid))
+        const fileList = this.torrents.filter(file => remainingUids.has(file.uid))
+        this.batchTorrentItems = remainingItems
+        const retainedKeys = this.activeBatchTorrentKeys.filter(key => {
+          return remainingItems.some(item => item.identity === key)
+        })
+        const firstFailedItem = remainingItems.find(item => {
+          return item.valid && item.selectFile !== NONE_SELECTED_FILES
+        })
+        this.activeBatchTorrentKeys = retainedKeys.length > 0
+          ? retainedKeys
+          : (firstFailedItem ? [firstFailedItem.identity] : [])
         this.emitBatchChange()
+        this.$store.dispatch('app/addTaskAddTorrents', { fileList })
       },
       handleBatchFileSelectionChange (torrentItem, selectedFileIndex) {
         torrentItem.selectFile = selectedFileIndex

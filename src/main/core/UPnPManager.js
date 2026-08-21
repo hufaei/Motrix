@@ -4,6 +4,7 @@ import logger from './Logger'
 
 let client = null
 const mappingStatus = {}
+const mappingPromises = {}
 
 export default class UPnPManager {
   constructor (options = {}) {
@@ -23,20 +24,27 @@ export default class UPnPManager {
   }
 
   map (port) {
+    if (!port) {
+      return Promise.reject(new Error('[Motrix] port was not specified'))
+    }
+
+    if (mappingStatus[port]) {
+      return Promise.resolve()
+    }
+
+    if (mappingPromises[port]) {
+      return mappingPromises[port]
+    }
+
     this.init()
 
-    return new Promise((resolve, reject) => {
+    mappingPromises[port] = new Promise((resolve, reject) => {
       logger.info('[Motrix] UPnPManager port mapping: ', port)
-      if (!port) {
-        reject(new Error('[Motrix] port was not specified'))
-        return
-      }
-
       try {
         client.map(port, (err) => {
           if (err) {
             logger.warn(`[Motrix] UPnPManager map ${port} failed, error: `, err.message)
-            reject(err.message)
+            reject(err)
             return
           }
 
@@ -45,8 +53,12 @@ export default class UPnPManager {
           resolve()
         })
       } catch (err) {
-        reject(err.message)
+        reject(err)
       }
+    })
+
+    return mappingPromises[port].finally(() => {
+      delete mappingPromises[port]
     })
   }
 
@@ -69,7 +81,7 @@ export default class UPnPManager {
         client.unmap(port, (err) => {
           if (err) {
             logger.warn(`[Motrix] UPnPManager unmap ${port} failed, error: `, err)
-            reject(err.message)
+            reject(err)
             return
           }
 
@@ -78,7 +90,7 @@ export default class UPnPManager {
           resolve()
         })
       } catch (err) {
-        reject(err.message)
+        reject(err)
       }
     })
   }
@@ -88,10 +100,14 @@ export default class UPnPManager {
       return
     }
 
+    const currentClient = client
+    client = null
+    Object.keys(mappingStatus).forEach(port => {
+      delete mappingStatus[port]
+    })
+
     try {
-      client.destroy(() => {
-        client = null
-      })
+      currentClient.destroy(() => {})
     } catch (err) {
       logger.warn('[Motrix] close UPnP client fail', err)
     }

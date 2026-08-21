@@ -2,6 +2,9 @@ import api from '@/api'
 import { EMPTY_STRING, TASK_STATUS } from '@shared/constants'
 import { checkTaskIsBT, intersection } from '@shared/utils'
 
+let fetchListRequestId = 0
+let fetchItemRequestId = 0
+
 const state = {
   currentList: 'active',
   taskDetailVisible: false,
@@ -58,8 +61,13 @@ const actions = {
     dispatch('fetchList')
   },
   fetchList ({ commit, state }) {
-    return api.fetchTaskList({ type: state.currentList })
+    const currentList = state.currentList
+    const requestId = ++fetchListRequestId
+    return api.fetchTaskList({ type: currentList })
       .then((data) => {
+        if (requestId !== fetchListRequestId || currentList !== state.currentList) {
+          return
+        }
         commit('UPDATE_TASK_LIST', data)
 
         const { selectedGidList } = state
@@ -75,15 +83,23 @@ const actions = {
     const gids = state.taskList.map((task) => task.gid)
     commit('UPDATE_SELECTED_GID_LIST', gids)
   },
-  fetchItem ({ dispatch }, gid) {
+  fetchItem ({ dispatch, state }, gid) {
+    const requestId = ++fetchItemRequestId
     return api.fetchTaskItem({ gid })
       .then((data) => {
+        if (requestId !== fetchItemRequestId || gid !== state.currentTaskGid) {
+          return
+        }
         dispatch('updateCurrentTaskItem', data)
       })
   },
-  fetchItemWithPeers ({ dispatch }, gid) {
+  fetchItemWithPeers ({ dispatch, state }, gid) {
+    const requestId = ++fetchItemRequestId
     return api.fetchTaskItemWithPeers({ gid })
       .then((data) => {
+        if (requestId !== fetchItemRequestId || gid !== state.currentTaskGid) {
+          return
+        }
         console.log('fetchItemWithPeers===>', data)
         dispatch('updateCurrentTaskItem', data)
       })

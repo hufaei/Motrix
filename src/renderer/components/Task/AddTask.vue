@@ -28,6 +28,7 @@
         <el-tab-pane :label="$t('task.torrent-task')" name="torrent">
           <el-form-item>
             <mo-select-torrent
+              ref="selectTorrent"
               v-on:change="handleTorrentChange"
               v-on:loading-change="handleTorrentLoadingChange"
             />
@@ -185,7 +186,7 @@
           </el-button>
           <el-button
             type="primary"
-            :loading="torrentLoadingActive"
+            :loading="submitLoading"
             @click="submitForm('taskForm')"
           >
             {{$t('app.submit')}}
@@ -234,6 +235,7 @@
         formLabelWidth: '110px',
         showAdvanced: false,
         torrentLoading: false,
+        submitting: false,
         form: {},
         rules: {}
       }
@@ -252,6 +254,9 @@
       },
       torrentLoadingActive () {
         return this.taskType === ADD_TASK_TYPE.TORRENT && this.torrentLoading
+      },
+      submitLoading () {
+        return this.torrentLoadingActive || this.submitting
       }
     },
     watch: {
@@ -360,23 +365,22 @@
       reset () {
         this.showAdvanced = false
         this.torrentLoading = false
+        this.submitting = false
         this.form = initTaskForm(this.$store.state)
       },
       addTask (type, form) {
-        let payload = null
         if (type === ADD_TASK_TYPE.URI) {
-          payload = buildUriPayload(form)
-          this.$store.dispatch('task/addUri', payload).catch(err => {
-            this.$msg.error(err.message)
-          })
+          const payload = buildUriPayload(form)
+          return this.$store.dispatch('task/addUri', payload)
         } else if (type === ADD_TASK_TYPE.TORRENT) {
           const payloads = buildTorrentPayloads(form)
           const action = payloads.length > 1
             ? 'task/addTorrents'
             : 'task/addTorrent'
           const payload = payloads.length > 1 ? payloads : payloads[0]
-          this.$store.dispatch(action, payload).catch(err => {
-            this.$msg.error(err.message)
+          return this.$store.dispatch(action, payload).catch(err => {
+            err.torrentPayloads = payloads
+            throw err
           })
         } else if (type === 'metalink') {
         // @TODO addMetalink
@@ -385,17 +389,18 @@
         }
       },
       submitForm (formName) {
-        if (this.type === ADD_TASK_TYPE.TORRENT && this.torrentLoading) {
+        if (this.submitLoading) {
           return
         }
 
-        this.$refs[formName].validate(valid => {
+        this.$refs[formName].validate(async valid => {
           if (!valid) {
             return false
           }
 
+          this.submitting = true
           try {
-            this.addTask(this.type, this.form)
+            await this.addTask(this.type, this.form)
 
             this.$store.dispatch('app/hideAddTaskDialog')
             if (this.form.newTaskShowDownloading) {
@@ -406,7 +411,26 @@
               })
             }
           } catch (err) {
-            this.$msg.error(this.$t(err.message))
+            const result = err.batchResult
+            if (result) {
+              if (result.successCount > 0) {
+                this.$store.dispatch('task/fetchList')
+              }
+              if (this.$refs.selectTorrent) {
+                this.$refs.selectTorrent.retainFailedTorrents(
+                  err.torrentPayloads,
+                  result.items
+                )
+              }
+              const message = `成功 ${result.successCount} 个，失败 ${result.failedCount} 个；失败项已保留`
+              result.successCount > 0
+                ? this.$msg.warning(message)
+                : this.$msg.error(message)
+            } else {
+              this.$msg.error(this.$t(err.message))
+            }
+          } finally {
+            this.submitting = false
           }
         })
       }
