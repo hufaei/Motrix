@@ -114,22 +114,20 @@ const actions = {
     commit('UPDATE_ABOUT_PANEL_VISIBLE', false)
   },
   fetchEngineInfo ({ commit }) {
-    api.getVersion()
+    return api.getVersion()
       .then((data) => {
         commit('UPDATE_ENGINE_INFO', data)
       })
   },
   fetchEngineOptions ({ commit }) {
-    return new Promise((resolve) => {
-      api.getGlobalOption()
-        .then((data) => {
-          commit('UPDATE_ENGINE_OPTIONS', data)
-          resolve(data)
-        })
-    })
+    return api.getGlobalOption()
+      .then((data) => {
+        commit('UPDATE_ENGINE_OPTIONS', data)
+        return data
+      })
   },
   fetchGlobalStat ({ commit, dispatch }) {
-    api.getGlobalStat()
+    return api.getGlobalStat()
       .then((data) => {
         const stat = {}
         Object.keys(data).forEach((key) => {
@@ -195,7 +193,7 @@ const actions = {
     commit('UPDATE_INTERVAL', BASE_INTERVAL)
   },
   fetchProgress ({ commit }) {
-    api.fetchActiveTaskList()
+    return api.fetchActiveTaskList()
       .then((data) => {
         let progress = -1
         if (data.length !== 0) {

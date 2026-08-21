@@ -133,6 +133,18 @@ export class JSONRPCClient extends EventEmitter {
     Object.keys(this.deferreds).forEach((id) => this._reject(id, err))
   }
 
+  _toError (value, fallbackMessage) {
+    if (value instanceof Error) return value
+    if (value && value.error instanceof Error) return value.error
+    return new Error((value && value.message) || fallbackMessage)
+  }
+
+  _emitError (err) {
+    if (this.listenerCount('error') > 0) {
+      this.emit('error', err)
+    }
+  }
+
   async _send (message) {
     this.emit('output', message)
 
@@ -187,7 +199,7 @@ export class JSONRPCClient extends EventEmitter {
       try {
         message = JSON.parse(event.data)
       } catch (err) {
-        this.emit('error', err)
+        this._emitError(err)
         return
       }
       this._onmessage(message)
@@ -195,8 +207,10 @@ export class JSONRPCClient extends EventEmitter {
     socket.onopen = (...args) => {
       this.emit('open', ...args)
     }
-    socket.onerror = (...args) => {
-      this.emit('error', ...args)
+    socket.onerror = (event) => {
+      const err = this._toError(event, 'JSON-RPC WebSocket error')
+      this._rejectAll(err)
+      this._emitError(err)
     }
 
     return promiseEvent(this, 'open')

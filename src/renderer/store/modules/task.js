@@ -1,4 +1,5 @@
 import api from '@/api'
+import { ipcRenderer } from 'electron'
 import { EMPTY_STRING, TASK_STATUS } from '@shared/constants'
 import { checkTaskIsBT, intersection } from '@shared/utils'
 
@@ -272,7 +273,12 @@ const actions = {
       .finally(() => dispatch('fetchList'))
   },
   saveSession () {
-    api.saveSession()
+    return api.saveSession()
+      .then(() => ipcRenderer.invoke('refresh-session-backup'))
+      .catch(err => {
+        console.warn('[Motrix] Unable to save download session:', err.message)
+        return false
+      })
   },
   purgeTaskRecord ({ dispatch }) {
     return api.purgeTaskRecord()

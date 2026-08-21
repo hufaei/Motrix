@@ -16,14 +16,24 @@ export default class Api {
   constructor (options = {}) {
     this.options = options
 
-    this.init()
+    this.init().catch(err => {
+      console.error('[Motrix] API initialization failed:', err)
+    })
   }
 
   async init () {
     this.config = await this.loadConfig()
 
     this.client = this.initClient()
-    this.client.open()
+    this.client.on('error', err => {
+      console.warn('[Motrix] JSON-RPC WebSocket error:', err.message)
+    })
+    try {
+      await this.client.open()
+    } catch (err) {
+      // RPC calls automatically fall back to HTTP while WebSocket is unavailable.
+      console.warn('[Motrix] JSON-RPC WebSocket unavailable, using HTTP:', err.message)
+    }
   }
 
   loadConfigFromLocalStorage () {

@@ -170,6 +170,7 @@
       type="button"
       class="el-dialog__headerbtn"
       aria-label="Close"
+      :disabled="submitLoading"
       @click="handleClose">
       <i class="el-dialog__close el-icon el-icon-close"></i>
     </button>
@@ -181,7 +182,7 @@
           </el-checkbox>
         </el-col>
         <el-col :span="15" :xs="15">
-          <el-button @click="handleCancel('taskForm')">
+          <el-button :disabled="submitLoading" @click="handleCancel('taskForm')">
             {{$t('app.cancel')}}
           </el-button>
           <el-button
@@ -292,6 +293,9 @@
         }
       },
       beforeClose () {
+        if (this.submitLoading) {
+          return
+        }
         if (
           isEmpty(this.form.uris) &&
           isEmpty(this.form.torrent) &&
@@ -313,9 +317,15 @@
         this.detectThunderResource(this.form.uris)
       },
       handleCancel () {
+        if (this.submitLoading) {
+          return
+        }
         this.$store.dispatch('app/hideAddTaskDialog')
       },
       handleClose () {
+        if (this.submitLoading) {
+          return
+        }
         this.$store.dispatch('app/hideAddTaskDialog')
         this.$store.dispatch('app/updateAddTaskOptions', {})
       },

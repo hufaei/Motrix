@@ -3,10 +3,7 @@
 import { Aria2 } from '@shared/aria2'
 
 import logger from './Logger'
-import {
-  compactUndefined,
-  formatOptionsForEngine
-} from '@shared/utils'
+import { formatOptionsForEngine } from '@shared/utils'
 import {
   ENGINE_RPC_HOST,
   ENGINE_RPC_PORT,
@@ -61,10 +58,7 @@ export default class EngineClient {
 
   async shutdown (options = {}) {
     const { force = false } = options
-    const { secret } = this.options
-
     const method = force ? 'forceShutdown' : 'shutdown'
-    const args = compactUndefined([secret])
-    return this.call(method, ...args)
+    return this.call(method)
   }
 }

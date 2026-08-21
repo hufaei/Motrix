@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events'
 import { app, shell, dialog, ipcMain } from 'electron'
 import is from 'electron-is'
-import { readFile, unlink } from 'fs'
+import { readFile } from 'fs'
 import { extname, basename } from 'path'
 import { isEmpty, isEqual } from 'lodash'
 
@@ -26,6 +26,7 @@ import UPnPManager from './core/UPnPManager'
 import AutoLaunchManager from './core/AutoLaunchManager'
 import UpdateManager from './core/UpdateManager'
 import EnergyManager from './core/EnergyManager'
+import SessionManager from './core/SessionManager'
 import ProtocolManager from './core/ProtocolManager'
 import WindowManager from './ui/WindowManager'
 import MenuManager from './ui/MenuManager'
@@ -47,6 +48,8 @@ export default class Application extends EventEmitter {
     this.initConfigManager()
 
     this.setupLogger()
+
+    this.initSessionManager()
 
     this.initLocaleManager()
 
@@ -119,6 +122,14 @@ export default class Application extends EventEmitter {
     })
   }
 
+  initSessionManager () {
+    this.sessionManager = new SessionManager({
+      sessionPath: this.context.get('session-path'),
+      logger
+    })
+    this.sessionManager.prepare()
+  }
+
   initLocaleManager () {
     this.locale = this.configManager.getLocale()
     this.localeManager = setupLocaleManager(this.locale)
@@ -168,14 +179,16 @@ export default class Application extends EventEmitter {
     logger.info('[Motrix] stopEngine===>')
     try {
       await this.engineClient.shutdown({ force: true })
-      logger.info('[Motrix] stopEngine.setImmediate===>')
-      setImmediate(() => {
-        this.engine.stop()
-      })
+      const exited = await this.engine.waitForExit(2000)
+      if (exited) {
+        this.sessionManager.refreshBackup()
+      } else {
+        logger.warn('[Motrix] engine shutdown timed out; preserving the previous session backup')
+      }
+      this.engine.stop()
     } catch (err) {
       logger.warn('[Motrix] shutdown engine fail: ', err.message)
-    } finally {
-      // no finally
+      this.engine.stop()
     }
   }
 
@@ -694,14 +707,10 @@ export default class Application extends EventEmitter {
 
     app.clearRecentDocuments()
 
-    const sessionPath = this.context.get('session-path')
-    setTimeout(() => {
-      unlink(sessionPath, function (err) {
-        logger.info('[Motrix] Removed the download seesion file:', err)
-      })
-
-      this.engine.start()
-    }, 3000)
+    await new Promise(resolve => setTimeout(resolve, 3000))
+    const success = this.sessionManager.reset()
+    logger.info('[Motrix] Removed the download session files:', success)
+    this.engine.start()
   }
 
   savePreference (config = {}) {
@@ -943,6 +952,10 @@ export default class Application extends EventEmitter {
   }
 
   handleIpcInvokes () {
+    ipcMain.handle('refresh-session-backup', async () => {
+      return this.sessionManager.refreshBackup()
+    })
+
     ipcMain.handle('get-app-config', async () => {
       const systemConfig = this.configManager.getSystemConfig()
       const userConfig = this.configManager.getUserConfig()

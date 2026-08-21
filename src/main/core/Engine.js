@@ -74,6 +74,25 @@ export default class Engine {
     }
   }
 
+  waitForExit (timeout = 2000) {
+    const instance = this.instance
+    if (!instance || instance.exitCode !== null || instance.signalCode !== null) {
+      return Promise.resolve(true)
+    }
+
+    return new Promise(resolve => {
+      const timer = setTimeout(() => {
+        instance.removeListener('exit', onExit)
+        resolve(false)
+      }, timeout)
+      const onExit = () => {
+        clearTimeout(timer)
+        resolve(true)
+      }
+      instance.once('exit', onExit)
+    })
+  }
+
   writePidFile (pidPath, pid) {
     writeFile(pidPath, pid, (err) => {
       if (err) {

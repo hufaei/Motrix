@@ -70,6 +70,20 @@ async function check () {
   await closed.close()
   await assert.rejects(pending, /connection closed/)
   assert.deepStrictEqual(Object.keys(closed.deferreds), [])
+
+  const socketFailure = new JSONRPCClient({ timeout: 100 })
+  await socketFailure.open()
+  const socketPending = socketFailure.call('pending')
+  socketFailure.socket.onerror(new Error('post-open failure'))
+  await assert.rejects(socketPending, /post-open failure/)
+  assert.deepStrictEqual(Object.keys(socketFailure.deferreds), [])
+
+  const observedFailure = new JSONRPCClient({ timeout: 100 })
+  let observedError
+  observedFailure.on('error', err => { observedError = err })
+  await observedFailure.open()
+  observedFailure.socket.onmessage({ data: 'not-json' })
+  assert(observedError instanceof SyntaxError)
 }
 
 check()

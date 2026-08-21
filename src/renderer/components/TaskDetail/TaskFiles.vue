@@ -5,10 +5,11 @@
         stripe
         ref="torrentTable"
         :height="height"
-        :data="files"
+        :data="pagedFiles"
         tooltip-effect="dark"
         style="width: 100%"
         @row-dblclick="handleRowDbClick"
+        @select-all="handleSelectAll"
         @selection-change="handleSelectionChange">
         <el-table-column
           type="selection"
@@ -47,6 +48,16 @@
         </el-table-column>
       </el-table>
     </div>
+    <el-pagination
+      v-if="files.length > pageSize"
+      class="file-pagination"
+      small
+      layout="prev, pager, next"
+      :current-page="currentPage"
+      :page-size="pageSize"
+      :total="files.length"
+      @current-change="handlePageChange"
+    />
     <el-row class="file-filters" :gutter="12">
       <el-col
         class="quick-filters"
@@ -124,10 +135,20 @@
     },
     data () {
       return {
-        selectedFiles: []
+        selectedFiles: [],
+        currentPage: 1,
+        pageSize: 200,
+        syncingSelection: false
       }
     },
     computed: {
+      pagedFiles () {
+        const start = (this.currentPage - 1) * this.pageSize
+        return this.files.slice(start, start + this.pageSize)
+      },
+      selectedFileIndexSet () {
+        return new Set(this.selectedFiles.map(item => String(item.idx)))
+      },
       selectedFilesCount () {
         return this.selectedFiles.length
       },
@@ -151,6 +172,16 @@
       }
     },
     watch: {
+      files (files, previousFiles) {
+        const wasAllSelected = previousFiles.length > 0 &&
+          this.selectedFiles.length === previousFiles.length
+        const selectedIndexes = this.selectedFileIndexSet
+        this.currentPage = 1
+        this.selectedFiles = wasAllSelected
+          ? files.slice()
+          : files.filter(item => selectedIndexes.has(String(item.idx)))
+        this.$nextTick(this.restorePageSelection)
+      },
       selectedFileIndex () {
         const { selectedFileIndex } = this
         this.$emit('selection-change', selectedFileIndex)
@@ -159,26 +190,32 @@
     methods: {
       calcProgress,
       toggleAllSelection () {
-        if (!this.$refs.torrentTable) {
-          return
-        }
-        this.$refs.torrentTable.toggleAllSelection()
+        this.$nextTick(() => {
+          this.selectedFiles = this.files.slice()
+          this.restorePageSelection()
+        })
       },
       clearSelection () {
-        if (!this.$refs.torrentTable) {
-          return
-        }
-        this.$refs.torrentTable.clearSelection()
+        this.selectedFiles = []
+        this.$nextTick(this.restorePageSelection)
       },
       toggleSelection (rows) {
-        if (isEmpty(rows)) {
-          this.$refs.torrentTable.clearSelection()
-        } else {
-          this.$refs.torrentTable.clearSelection()
-          rows.forEach(row => {
-            this.$refs.torrentTable.toggleRowSelection(row, true)
-          })
+        this.selectedFiles = isEmpty(rows) ? [] : rows.slice()
+        this.$nextTick(this.restorePageSelection)
+      },
+      restorePageSelection () {
+        const table = this.$refs.torrentTable
+        if (!table) {
+          return
         }
+        this.syncingSelection = true
+        table.clearSelection()
+        this.pagedFiles.forEach(row => {
+          if (this.selectedFileIndexSet.has(String(row.idx))) {
+            table.toggleRowSelection(row, true)
+          }
+        })
+        this.syncingSelection = false
       },
       toggleVideoSelection () {
         const filtered = filterVideoFiles(this.files)
@@ -195,8 +232,22 @@
       handleRowDbClick (row, column, event) {
         this.$refs.torrentTable.toggleRowSelection(row)
       },
+      handleSelectAll (selection) {
+        this.selectedFiles = selection.length === 0 ? [] : this.files.slice()
+      },
+      handlePageChange (page) {
+        this.syncingSelection = true
+        this.currentPage = page
+        this.$nextTick(this.restorePageSelection)
+      },
       handleSelectionChange (val) {
-        this.selectedFiles = val
+        if (this.syncingSelection) {
+          return
+        }
+        const pageIndexes = new Set(this.pagedFiles.map(item => String(item.idx)))
+        this.selectedFiles = this.selectedFiles
+          .filter(item => !pageIndexes.has(String(item.idx)))
+          .concat(val)
       }
     }
   }
@@ -216,5 +267,9 @@
     color: $--color-text-regular;
     line-height: 1.75rem;
   }
+}
+.file-pagination {
+  margin-top: 0.5rem;
+  text-align: right;
 }
 </style>
