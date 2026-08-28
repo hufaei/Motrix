@@ -150,6 +150,25 @@ async function waitForRpc (client, child, getSpawnError, getStderr) {
   throw new Error(`aria2 RPC did not become ready: ${lastError || 'timeout'}`)
 }
 
+async function waitForTaskStatus (client, gid, expectedStatus) {
+  const deadline = Date.now() + 5000
+  let task
+
+  while (Date.now() < deadline) {
+    task = await client.call('tellStatus', gid, [
+      'status',
+      'errorCode',
+      'errorMessage'
+    ])
+    if (task.status === expectedStatus) return task
+    await delay(50)
+  }
+
+  throw new Error(
+    `Task ${gid} did not reach ${expectedStatus}: ${JSON.stringify(task)}`
+  )
+}
+
 function assertSuccessfulGid (result) {
   assert.ok(Array.isArray(result), 'successful multicall item must be an array')
   assert.strictEqual(result.length, 1)
@@ -259,6 +278,18 @@ async function check () {
     assert.strictEqual(partialBatch.length, 2)
     assertSuccessfulGid(partialBatch[0])
     assertRpcError(partialBatch[1])
+
+    const collisionName = 'existing-file.bin'
+    fs.writeFileSync(path.join(downloadDirectory, collisionName), Buffer.alloc(9, 7))
+    const collisionGid = await client.call(
+      'addTorrent',
+      createTorrent(collisionName, 4).toString('base64'),
+      [],
+      { pause: 'false', 'allow-overwrite': 'false' }
+    )
+    const collisionTask = await waitForTaskStatus(client, collisionGid, 'error')
+    assert.strictEqual(collisionTask.errorCode, '13')
+    assert.match(collisionTask.errorMessage, /exists/i)
 
     const architectureNote = architecture === process.arch
       ? `${process.platform}/${architecture}`

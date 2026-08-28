@@ -26,8 +26,12 @@
       </div>
     </el-form-item>
     <el-form-item :label="`${$t('task.task-error-info')}: `" v-if="task.errorCode && task.errorCode !== '0'">
-      <div class="form-static-value">
-        {{ task.errorCode }} {{ task.errorMessage }}
+      <div class="task-error-detail">
+        <div class="task-error-reason">{{ taskError.reasonWithCode }}</div>
+        <div class="task-error-suggestion">{{ taskError.suggestion }}</div>
+        <div class="task-error-original" v-if="taskError.original">
+          {{ taskError.original }}
+        </div>
       </div>
     </el-form-item>
 
@@ -85,6 +89,7 @@
   } from '@shared/utils'
   import { APP_THEME, TASK_STATUS } from '@shared/constants'
   import { getTaskFullPath } from '@/utils/native'
+  import { getTaskErrorPresentation } from '@/utils/taskError'
   import ShowInFolder from '@/components/Native/ShowInFolder'
   import TaskStatus from '@/components/Task/TaskStatus'
   import '@/components/Icons/folder'
@@ -152,6 +157,9 @@
       },
       isBT () {
         return checkTaskIsBT(this.task)
+      },
+      taskError () {
+        return getTaskErrorPresentation(this.task, (key, params) => this.$t(key, params))
       }
     },
     filters: {
@@ -174,5 +182,29 @@
 <style lang="scss">
 .copy-link {
   cursor: pointer;
+}
+
+.task-error-detail {
+  padding: 10px 12px;
+  border: 1px solid rgba(245, 108, 108, 0.35);
+  border-radius: 6px;
+  background: rgba(245, 108, 108, 0.08);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.task-error-reason {
+  color: #f56c6c;
+  font-weight: 600;
+}
+
+.task-error-suggestion {
+  margin-top: 4px;
+}
+
+.task-error-original {
+  margin-top: 6px;
+  color: #909399;
+  font-size: 12px;
 }
 </style>

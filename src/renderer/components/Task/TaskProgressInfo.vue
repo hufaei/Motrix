@@ -14,13 +14,21 @@
     </el-col>
     <el-col
       class="task-progress-info-right"
-      v-if="isActive"
+      v-if="isActive || hasError"
       :xs="12"
       :sm="17"
       :md="18"
       :lg="18"
     >
-      <div class="task-speed-info">
+      <div
+        class="task-error-text"
+        v-if="hasError"
+        :title="taskError.detail"
+      >
+        <i class="el-icon-warning-outline"></i>
+        <span>{{ taskError.reasonWithCode }}</span>
+      </div>
+      <div class="task-speed-info" v-else>
         <div class="task-speed-text" v-if="isBT">
           <i><mo-icon name="arrow-up" width="10" height="14" /></i>
           <span>{{ task.uploadSpeed | bytesToSize }}/s</span>
@@ -66,6 +74,7 @@
     timeRemaining
   } from '@shared/utils'
   import { TASK_STATUS } from '@shared/constants'
+  import { getTaskErrorPresentation, hasTaskError } from '@/utils/taskError'
   import '@/components/Icons/arrow-up'
   import '@/components/Icons/arrow-down'
   import '@/components/Icons/node'
@@ -81,6 +90,12 @@
     computed: {
       isActive () {
         return this.task.status === TASK_STATUS.ACTIVE
+      },
+      hasError () {
+        return hasTaskError(this.task)
+      },
+      taskError () {
+        return getTaskErrorPresentation(this.task, (key, params) => this.$t(key, params))
       },
       isBT () {
         return checkTaskIsBT(this.task)
@@ -142,6 +157,16 @@
     & > span {
       font-size: 0.75rem;
     }
+  }
+}
+.task-error-text {
+  color: #f56c6c;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  & > i {
+    margin-right: 0.25rem;
   }
 }
 </style>

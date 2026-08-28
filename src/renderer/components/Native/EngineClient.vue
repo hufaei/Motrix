@@ -10,6 +10,7 @@
     getTaskFullPath,
     showItemInFolder
   } from '@/utils/native'
+  import { getTaskErrorPresentation } from '@/utils/taskError'
   import { checkTaskIsBT, getTaskName } from '@shared/utils'
 
   export default {
@@ -116,6 +117,8 @@
           })
       },
       onDownloadError (event) {
+        this.$store.dispatch('task/fetchList')
+        this.$store.dispatch('task/saveSession')
         const [{ gid }] = event
         this.fetchTaskItem({ gid })
           .then((task) => {
@@ -125,15 +128,7 @@
             const taskName = getTaskName(task)
             const { errorCode, errorMessage } = task
             console.error(`[Motrix] download error gid: ${gid}, #${errorCode}, ${errorMessage}`)
-            const message = this.$t('task.download-error-message', { taskName })
-            const link = `<a target="_blank" href="https://github.com/agalwood/Motrix/wiki/Error#${errorCode}" rel="noopener noreferrer">${errorCode}</a>`
-            this.$msg({
-              type: 'error',
-              showClose: true,
-              duration: 5000,
-              dangerouslyUseHTMLString: true,
-              message: `${message} ${link}`
-            })
+            this.showTaskErrorNotify(task, taskName)
           })
       },
       onDownloadComplete (event) {
@@ -203,11 +198,20 @@
           })
         }
       },
-      showTaskErrorNotify (task) {
-        const taskName = getTaskName(task)
+      showTaskErrorNotify (task, taskName = getTaskName(task)) {
+        const error = getTaskErrorPresentation(task, (key, params) => this.$t(key, params))
+        const message = [
+          this.$t('task.download-error-message', { taskName }),
+          error.summary
+        ].filter(Boolean).join('\n')
 
-        const message = this.$t('task.download-fail-message', { taskName })
-        this.$msg.error(message)
+        this.$msg({
+          type: 'error',
+          showClose: true,
+          duration: 12000,
+          customClass: 'motrix-task-error-message',
+          message
+        })
 
         if (!this.taskNotification) {
           return
@@ -215,7 +219,7 @@
 
         /* eslint-disable no-new */
         new Notification(this.$t('task.download-fail-notify'), {
-          body: taskName
+          body: `${taskName}\n${error.summary}`
         })
       },
       bindEngineEvents () {
@@ -295,3 +299,15 @@
     }
   }
 </script>
+
+<style lang="scss">
+.motrix-task-error-message {
+  max-width: 720px;
+  height: auto;
+
+  .el-message__content {
+    white-space: pre-line;
+    line-height: 1.5;
+  }
+}
+</style>

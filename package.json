@@ -24,7 +24,7 @@
     "build:web": "cross-env BUILD_TARGET=web node .electron-vue/build.js",
     "dev": "node .electron-vue/dev-runner.js",
     "dev:renderer": "webpack serve --node-env development --hot --color --config .electron-vue/webpack.renderer.config.js --port 9080 --static-directory app/dist",
-    "test": "node scripts/check-json-rpc-client.js && node scripts/check-engine-client.js && node scripts/check-store-promises.js && node scripts/check-session-manager.js && node scripts/check-native-delete.js && node scripts/check-batch-torrents.js",
+    "test": "node scripts/check-json-rpc-client.js && node scripts/check-engine-client.js && node scripts/check-store-promises.js && node scripts/check-session-manager.js && node scripts/check-native-delete.js && node scripts/check-task-error.js && node scripts/check-batch-torrents.js",
     "lint": "eslint --ext .js,.vue -f ./node_modules/eslint-friendly-formatter src scripts",
     "lint:fix": "eslint --ext .js,.vue -f ./node_modules/eslint-friendly-formatter --fix src scripts",
     "pack": "npm run pack:main && npm run pack:renderer",
